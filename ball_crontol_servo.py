@@ -245,14 +245,3 @@ if __name__ == '__main__':
     p1.join()
     p2.join()
 
-
-    test = [0,0,0]
-    teller = 0
-    test[teller]= verdi
-    teller+=1
-    if teller > 2
-        teller = 0
-
-    gjennomsnitt = sum(test)/len(teller)
-
-    gjennomsnitt til servo
