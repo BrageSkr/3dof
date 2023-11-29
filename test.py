@@ -7,6 +7,8 @@ import cv2
 import serial
 import time
 from tkinter import *
+import os
+import csv
 
 hmin_v = 25
 hmax_v = 110
@@ -39,7 +41,40 @@ cap.set(3, 960)
 cap.set(4, 540)
 get, img = cap.read()
 h, w, _ = img.shape
+counter = 0
 
+# Initialization of the CSV file:
+fieldnames = ["num", "x", "y", "targetX","targetY", "errorX","errorY"]
+output_dir = 'Gen_Data'
+output_file = f'{output_dir}/saved_data.csv'
+
+# Check if directory exists, create if not
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+
+# Initialize CSV file with header if it doesn't exist
+if not os.path.exists(output_file):
+    with open(output_file, 'w') as csv_file:
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+
+
+# Saving Data to the CSV file:
+def save_data(xpos,ypos,targetx,targety,errorx,errory):
+    global counter
+    with open(output_file, 'a') as csv_file:
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        info = {
+            "num": counter,
+            "x": xpos,
+            "y": ypos,
+            "targetX": targetx,
+            "targetY": targety,
+            "errorX": errorx,
+            "errorY": errory,
+        }
+        csv_writer.writerow(info)
+        counter += 1
 def ball_track(key1, queue):
     prevX = 0
     prevY = 0
@@ -104,7 +139,7 @@ def ball_track(key1, queue):
 
 
 def servo_control(key2, queue):
-    port_id = '/dev/cu.usbmodem11401'
+    port_id = '/dev/cu.usbmodem1401'
     # initialise serial interface
     arduino = serial.Serial(port=port_id, baudrate=250000, timeout=0.1)
 
@@ -171,19 +206,6 @@ def servo_control(key2, queue):
         #print("Yooooo: ", cord_info[0], " ", cord_info[1])
         return cord_info
 
-    def P_Reg(pos_x, pos_y):  # out = kp*e   e = reff - pos
-        kp = 1.2
-        reff_val_x = 0
-        reff_val_y = 0
-        if (pos_x == 'nil') or (pos_y == 'nil'):
-            pos_x = 0
-            pos_y = 0
-
-        error_x = reff_val_x - pos_x
-        error_y = reff_val_y - pos_y
-        output_x = error_x * kp
-        output_y = error_y * kp
-        return output_x, output_y
 
     def ballpos_to_servo_angle(x_cord, y_cord):
         """ convert the distance to center to angle.
@@ -259,7 +281,7 @@ def servo_control(key2, queue):
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         filter_write_angle_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
-
+        save_data(pos_x,pos_y,reff_val_x,reff_val_y,error_x,error_y)
         start_time = time.time()
     root.mainloop()  # running loop
 

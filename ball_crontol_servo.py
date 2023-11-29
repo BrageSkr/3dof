@@ -75,7 +75,7 @@ def ball_track(key1, queue):
 
 
 def servo_control(key2, queue):
-    port_id = '/dev/cu.usbmodem21101'
+    port_id = '/dev/cu.usbmodem1401'
     # initialise serial interface
     arduino = serial.Serial(port=port_id, baudrate=250000, timeout=0.1)
 
