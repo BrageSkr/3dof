@@ -7,12 +7,14 @@ import cv2
 import serial
 import time
 from tkinter import *
+import os
+import csv
 
-hmin_v = 10
-hmax_v = 30
-smin_v = 170
+hmin_v = 25
+hmax_v = 110
+smin_v = 80
 smax_v = 255
-vmin_v = 200
+vmin_v = 80
 vmax_v = 255
 # define servo angles and set a value
 servo1_angle = 0
@@ -32,35 +34,85 @@ servo2_angle_limit_negative = -73
 servo3_angle_zero = 0
 servo3_angle_limit_positive = 40
 servo3_angle_limit_negative = -53
+
 camera_port = 0
 cap = cv2.VideoCapture(camera_port)
-cap.set(3, 1280)
-cap.set(4, 720)
+cap.set(3, 960)
+cap.set(4, 540)
 get, img = cap.read()
 h, w, _ = img.shape
+counter = 0
 
+# Initialization of the CSV file:
+fieldnames = ["num", "x", "y", "targetX","targetY", "errorX","errorY","errortot","PidX","PidY"]
+output_dir = 'Gen_Data'
+output_file = f'{output_dir}/saved_data.csv'
+
+# Check if directory exists, create if not
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+
+# Initialize CSV file with header if it doesn't exist
+if not os.path.exists(output_file):
+    with open(output_file, 'w') as csv_file:
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+
+
+# Saving Data to the CSV file:
+def save_data(xpos,ypos,targetx,targety,errorx,errory,PidX,PidY):
+    global counter
+    errortot= np.sqrt(errorx**2+errory**2)
+    with open(output_file, 'a') as csv_file:
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        info = {
+            "num": counter,
+            "x": xpos,
+            "y": ypos,
+            "targetX": targetx,
+            "targetY": targety,
+            "errorX": errorx,
+            "errorY": errory,
+            "pidX": PidX,
+            "pidY": PidY,
+            "errortot": errortot,
+        }
+        csv_writer.writerow(info)
+        counter += 1
 def ball_track(key1, queue):
-
-
+    prevX = 0
+    prevY = 0
 
     if key1:
         print('Ball tracking is initiated')
 
     myColorFinder = ColorFinder(
-        False)  # if you want to find the color and calibrate the program we use this *(Debugging)
+        FALSE)  # if you want to find the color and calibrate the program we use this *(Debugging)
     hsvVals = {'hmin': hmin_v, 'smin': smin_v, 'vmin': vmin_v, 'hmax': hmax_v, 'smax': smax_v,
                'vmax': vmax_v}
 
-    center_point = [640, 360, 2210]  # center point of the plate, calibrated
+    center_point = [480, 270, 2210]  # center point of the plate, calibrated
 
     while True:
         get, img = cap.read()
-        imgColor, mask = myColorFinder.update(img, hsvVals)
-        imgContour, countours = cvzone.findContours(img, mask)
+        mask_plat = np.zeros(img.shape[:2], dtype='uint8')
+        cv2.circle(mask_plat, (480, 270), 270, (255, 255, 255), -1)
+
+        # Make circular mask
+        masked = cv2.bitwise_and(img, img, mask=mask_plat)
+
+        imgColor, mask = myColorFinder.update(masked, hsvVals)
+        imgContour, countours = cvzone.findContours(masked, mask, minArea=2000, maxArea=5500)
+
+        x = -120
+        y = -120
 
         if countours:
-            data = round((countours[0]['center'][0] - center_point[0]) / 10), \
-                round((h - countours[0]['center'][1] - center_point[1]) / 10), \
+            x = round((countours[0]['center'][0]))
+            y = round((countours[0]['center'][1]))
+
+            data = round((countours[0]['center'][0] - center_point[0]) / 1), \
+                round((h - countours[0]['center'][1] - center_point[1]) / 1), \
                 round(int(countours[0]['area'] - center_point[2]) / 100)
 
             queue.put(data)
@@ -69,9 +121,25 @@ def ball_track(key1, queue):
             queue.put(data)
 
         imgStack = cvzone.stackImages([imgContour], 1, 1)
-        # mgStack = cvzone.stackImages([img, imgColor, mask, imgContour], 2, 0.5)  # use for calibration and correction
+        #imgStack = cvzone.stackImages([img, imgColor, mask, imgContour], 2, 0.5)  # use for calibration and correction
+        cv2.circle(imgStack, (center_point[0], center_point[1]), 270, (255, 20, 20), 6)
+        cv2.circle(imgStack, (center_point[0], center_point[1]), 2, (20, 20, 255), 2)
+
+        cv2.circle(imgStack, (x, y), 5, (20, 20, 255), 2)
+        cv2.circle(imgStack, (x, y), 40, (180, 120, 255), 2)
+
+        vector = [prevX - x, prevY - y]
+        cv2.arrowedLine(imgStack, (x, y), (x-vector[0]*10, y-vector[1]*10), (39,237,250),4)
+
+        cv2.circle(imgStack, (center_point[0]+int(80*np.cos(time.time())), center_point[1]-int(80*np.sin(time.time()))), 5, (20, 20, 255), 2)
+
+        prevX = x
+        prevY = y
+
         cv2.imshow("Image", imgStack)
+        start_time = time.time()
         cv2.waitKey(1)
+
 
 
 def servo_control(key2, queue):
@@ -123,10 +191,10 @@ def servo_control(key2, queue):
         angle2 = np.rad2deg(np.arcsin(np.clip(all_the_rot[2, 1] / R, -1, 1)))
         angle3 = np.rad2deg(np.arcsin(np.clip(all_the_rot[2, 2] / R, -1, 1)))
 
-        # Clip angles to be within -60 and 60 degrees
-        angle1 = np.clip(angle1, -60, 60)
-        angle2 = np.clip(angle2, -60, 60)
-        angle3 = np.clip(angle3, -60, 60)
+        # Clip angles to be within -50 and 50 degrees
+        angle1 = np.clip(angle1, -50, 50)
+        angle2 = np.clip(angle2, -50, 50)
+        angle3 = np.clip(angle3, -50, 50)
 
         return angle1, angle2, angle3
 
@@ -139,31 +207,18 @@ def servo_control(key2, queue):
 
     def get_ball_pos():
         cord_info = queue.get()
+        #print("Yooooo: ", cord_info[0], " ", cord_info[1])
         return cord_info
-
-    def P_Reg(pos_x, pos_y):  # out = kp*e   e = reff - pos
-        kp = 1.2
-        reff_val_x = 0
-        reff_val_y = 0
-        if (pos_x == 'nil') or (pos_y == 'nil'):
-            pos_x = 0
-            pos_y = 0
-
-        error_x = reff_val_x - pos_x
-        error_y = reff_val_y - pos_y
-        output_x = error_x * kp
-        output_y = error_y * kp
-        return output_x, output_y
 
 
     def ballpos_to_servo_angle(x_cord, y_cord):
-        # convert the distance to center to angle.
-        x_ang = map_x_to_y(x_cord, x_min=28.0, x_max=-28.0, y_min=-20.0, y_max=20.0)
-        y_ang = map_x_to_y(y_cord, x_min=28.0, x_max=-28.0, y_min=-20.0, y_max=20.0)
-
+        """ convert the distance to center to angle.
+        x_ang = map_x_to_y(x_cord/10, x_min=28.00, x_max=-28.00, y_min=-35.00, y_max=35.00)
+        y_ang = map_x_to_y(y_cord/10, x_min=28.00, x_max=-28.00, y_min=-35.00, y_max=35.00)
+        """
         # x and y angle(deg) in and servoangle out(rad)
-        servo_ang1, servo_ang2, servo_ang3 = kinematics(0, 22, y_ang, x_ang)
-        print("angle", servo_ang1, " ", (servo_ang2), " ", (servo_ang3))
+        servo_ang1, servo_ang2, servo_ang3 = kinematics(0, 22, -y_cord, -x_cord)
+        #print("angle", servo_ang1, " ", (servo_ang2), " ", (servo_ang3))
 
         return servo_ang1, servo_ang2, servo_ang3
 
@@ -176,30 +231,32 @@ def servo_control(key2, queue):
     def write_servo(ang1, ang2, ang3):
         angles: tuple = (round(ang1, 1),
                          round(ang2, 1),
-                         round(ang3,1))
+                         round(ang3, 1))
         write_arduino(str(angles))
 
     def write_arduino(data):
-        print('The angles send to the arduino : ', data)
+        #print('The angles send to the arduino : ', data)
         arduino.write(bytes(data, 'utf-8'))
 
-    kp = 0.53
-    ki = 0.315
-    kd = 0.25
-
+    kp = 0.51
+    ki = 0.31
+    kd = 0.26
+    reff_val_x = 0
+    reff_val_y = 0
     integral_error_x = 0
     integral_error_y = 0
     last_error_x = 0
     last_error_y = 0
     start_time = 0
 
-
     while key2:
 
         cord_info = get_ball_pos()  # Ballpos
+        reff_val_x = (100*np.cos(time.time()))/10
+        reff_val_y = (100*np.sin(time.time()))/10
         if cord_info =='nil':
-            error_x = 0
-            error_y = 0
+            reff_val_x = 0
+            reff_val_y = 0
             integral_error_x = 0
             integral_error_y = 0
             last_error_x = 0
@@ -207,12 +264,11 @@ def servo_control(key2, queue):
             pos_x = 0
             pos_y = 0
         else:
-            pos_x = cord_info[0]
-            pos_y = cord_info[1]
-        reff_val_x = 0
-        reff_val_y = 0
-        dt = time.time()-start_time
+            pos_x = (float(cord_info[0])/10)
+            pos_y = (float(cord_info[1])/10)
 
+        dt = time.time()-start_time
+        #print("dt: Matte: ", dt)
         error_x = reff_val_x - pos_x
         error_y = reff_val_y - pos_y
         integral_error_x += error_x * dt
@@ -229,7 +285,7 @@ def servo_control(key2, queue):
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         filter_write_angle_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
-
+        save_data(pos_x,pos_y,reff_val_x,reff_val_y,error_x,error_y)
         start_time = time.time()
     root.mainloop()  # running loop
 

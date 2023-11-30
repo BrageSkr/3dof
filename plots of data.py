@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 # Define the CSV file and field names
 output_dir = 'Gen_Data'
 output_file = f'{output_dir}/saved_data.csv'
-fieldnames = ["num", "x", "y", "targetX", "targetY", "errorX", "errorY"]
+fieldnames = ["num", "x", "y", "targetX","targetY", "errorX","errorY","errortot","PidX","PidY"]
 
 # Read data using pandas
 data = pd.read_csv(output_file)
@@ -16,6 +16,9 @@ targetX_values = data['targetX']
 targetY_values = data['targetY']
 errorX_values = data['errorX']
 errorY_values = data['errorY']
+errortot_values = data['errortot']
+Pidx_values = data['PidX']
+Pidy_values = data['PidY']
 
 # Plotting
 plt.figure(figsize=(18, 14))

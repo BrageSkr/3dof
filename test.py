@@ -44,7 +44,7 @@ h, w, _ = img.shape
 counter = 0
 
 # Initialization of the CSV file:
-fieldnames = ["num", "x", "y", "targetX","targetY", "errorX","errorY"]
+fieldnames = ["num", "x", "y", "targetX","targetY", "errorX","errorY","errortot","PidX","PidY"]
 output_dir = 'Gen_Data'
 output_file = f'{output_dir}/saved_data.csv'
 
@@ -60,8 +60,9 @@ if not os.path.exists(output_file):
 
 
 # Saving Data to the CSV file:
-def save_data(xpos,ypos,targetx,targety,errorx,errory):
+def save_data(xpos,ypos,targetx,targety,errorx,errory,PidX,PidY):
     global counter
+    errortot= np.sqrt(errorx**2+errory**2)
     with open(output_file, 'a') as csv_file:
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         info = {
@@ -72,6 +73,9 @@ def save_data(xpos,ypos,targetx,targety,errorx,errory):
             "targetY": targety,
             "errorX": errorx,
             "errorY": errory,
+            "pidX": PidX,
+            "pidY": PidY,
+            "errortot": errortot,
         }
         csv_writer.writerow(info)
         counter += 1
@@ -236,7 +240,7 @@ def servo_control(key2, queue):
 
     kp = 0.51
     ki = 0.31
-    kd = 0.26
+    kd = 0.25
     reff_val_x = 0
     reff_val_y = 0
     integral_error_x = 0
@@ -248,8 +252,8 @@ def servo_control(key2, queue):
     while key2:
 
         cord_info = get_ball_pos()  # Ballpos
-        reff_val_x = (100*np.cos(time.time()))/10
-        reff_val_y = (100*np.sin(time.time()))/10
+        reff_val_x =(100*np.cos(time.time()))/10
+        reff_val_y =(100*np.sin(time.time()))/10
         if cord_info =='nil':
             reff_val_x = 0
             reff_val_y = 0
@@ -281,7 +285,7 @@ def servo_control(key2, queue):
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         filter_write_angle_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
-        save_data(pos_x,pos_y,reff_val_x,reff_val_y,error_x,error_y)
+        save_data(pos_x,pos_y,reff_val_x,reff_val_y,error_x,error_y,output_x,output_y)
         start_time = time.time()
     root.mainloop()  # running loop
 
