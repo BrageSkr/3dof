@@ -12,12 +12,13 @@ from tkinter import *
 import os
 import csv
 
-hmin_v = 0#30
-hmax_v = 50#90
-smin_v = 0#30
-smax_v = 50#255
-vmin_v = 170#30
-vmax_v = 255#255
+hmin_v = 0
+hmax_v = 50
+smin_v = 0
+smax_v = 50
+vmin_v = 170
+vmax_v = 255
+
 counter = 0
 filter_on = True
 camera_port = 0
@@ -27,10 +28,12 @@ cap.set(4, 540)
 get, img = cap.read()
 h, w, _ = img.shape
 
+
 # Initialization of the CSV file:
 fieldnames = ["num", "x", "y", "targetX", "targetY", "errorX", "errorY", "tot_error", "PID_x", "PID_y"]
+
 output_dir = 'Gen_Data'
-output_file = f'{output_dir}/saved_datacenterfilter2.csv'
+output_file = f'{output_dir}/saved_datadervfilter175_2.csv'
 
 # Check if directory exists, create if not
 if not os.path.exists(output_dir):
@@ -67,7 +70,6 @@ def save_data(xpos, ypos, targetx, targety, errorx, errory, PID_x, PID_y):
 def ball_track(key1, queue):
     prevX = 0
     prevY = 0
-
 
     if key1:
         print('Ball tracking is initiated')
@@ -117,7 +119,7 @@ def ball_track(key1, queue):
         cv2.arrowedLine(imgStack, (x, y), (x - vector[0] * 10, y - vector[1] * 10), (39, 237, 250), 4)
 
         cv2.circle(imgStack,
-                   (center_point[0] + int(100 * np.cos(time.time())), center_point[1] - int(100 * np.sin(time.time()))),
+                   (center_point[0] + int(80 * np.cos(time.time())), center_point[1] - int(80 * np.sin(time.time()))),
                    5, (20, 20, 255), 2)
 
         prevX = x
@@ -154,6 +156,7 @@ def servo_control(key2, queue):
             self.error = self.setpoint - systemValue
             self.IntegralError += self.error * self.dt
             self.DerivativeError = (self.error - self.lastError) / self.dt
+
 
             output = (-self.Kp * self.error) + (-self.Ki * self.IntegralError) + (-self.Kd * self.DerivativeError)
 
@@ -276,42 +279,42 @@ def servo_control(key2, queue):
         # print('The angles send to the arduino : ', data)
         arduino.write(bytes(data, 'utf-8'))
 
+    kp = 0.51  # brageverdi
+    # ki =  0.64 # 20s
 
-    kp = 0.482 #brageverdi
-    #ki =  0.64 # 20s
+    ki = 0.33  # brageverdi
+    # kd =  0.345 # 20s
 
-    ki = 0.347 #brageverdi
-    #kd =  0.345 # 20s
-
-    kd = 0.33 #brageverdi 9sek
+    kd = 0.338  # brageverdi 9sek
 
     PID_X = PID(kp, ki, kd, 0)
     PID_Y = PID(kp, ki, kd, 0)
     PID_filter_data_x = array.array('f', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     PID_filter_data_y = array.array('f', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    filter_deriv_error_x = 0
+    filter_deriv_error_y = 0
 
     while key2:
 
         cord_info = get_ball_pos()  # Ballpos
         deriv_error_x = PID_X.getDerivativeError()
         deriv_error_y = PID_Y.getDerivativeError()
-
-        reff_val_x = 0#(100*np.cos(time.time()))/10
-        reff_val_y =0# (100*np.sin(time.time()))/10
+        print("deriv", deriv_error_x, " , ", deriv_error_y)
+        reff_val_x = (80*np.cos(time.time()))/10
+        reff_val_y = (80*np.sin(time.time()))/10
         PID_Y.updateSetpoint(reff_val_y)
         PID_X.updateSetpoint(reff_val_x)
 
-        if cord_info == 'nil':
+        if cord_info == 'nil' :
             PID_X.resetErrors()
             PID_Y.resetErrors()
-            pos_x = 0
-            pos_y = 0
             PID_X.updateSetpoint(0)
             PID_Y.updateSetpoint(0)
             PID_filter_data_x = array.array('f', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
             PID_filter_data_y = array.array('f', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-            filtered_error_data_x = 0
-            filtered_error_data_y = 0
+            pos_x = 0
+            pos_y = 0
+
         else:
             pos_x = (float(cord_info[0]) / 10)
             pos_y = (float(cord_info[1]) / 10)
@@ -321,31 +324,38 @@ def servo_control(key2, queue):
         output_x = PID_X.compute(pos_x)
         output_y = PID_Y.compute(pos_y)
 
-
-
         if output_x != 0:
-            cutoff_x = 4
-            PID_filter_data_x.append(output_x)
-        else:
-            cutoff_x = 0.5
+            PID_filter_data_x.append(PID_X.getDerivativeError())
 
         if output_y != 0:
-            cutoff_y = 4
-            PID_filter_data_y.append(output_y)
+            PID_filter_data_y.append(PID_Y.getDerivativeError())
+
+        if pos_x != 0:
+            cutoff_x = 0.175
         else:
-            cutoff_y = 0.5
+            cutoff_x = 0.01
+
+        if pos_x != 0:
+            cutoff_y = 0.175
+        else:
+            cutoff_y = 0.01
 
         if filter_on:
             if ((len(PID_filter_data_x) >= 15) and (len(PID_filter_data_y) >= 15)):
                 filtered_error_data_x = butter_lowpass_filter(data=PID_filter_data_x, cutoff=cutoff_x, fs=100, order=2)
                 filtered_error_data_y = butter_lowpass_filter(data=PID_filter_data_y, cutoff=cutoff_y, fs=100, order=2)
+                print("Filter_data x-----------", filtered_error_data_x[len(filtered_error_data_x) - 1])
+                print("Filter_data y-----------", filtered_error_data_y[len(filtered_error_data_y) - 1])
                 filter_deriv_error_x = filtered_error_data_x[len(filtered_error_data_x) - 1]
                 filter_deriv_error_y = filtered_error_data_y[len(filtered_error_data_y) - 1]
-                output_x = filter_deriv_error_x
-                output_y = filter_deriv_error_y
+                PID_x_filter = PID_X.compute_filtered(pos_x, PID_X.getError(), PID_X.getIntegralError(), filter_deriv_error_x)
+                PID_y_filter = PID_Y.compute_filtered(pos_y, PID_Y.getError(), PID_Y.getIntegralError(), filter_deriv_error_y)
+                output_x = PID_x_filter
+                output_y = PID_y_filter
 
 
 
+        print(output_x, "   ", output_y)
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         write_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
