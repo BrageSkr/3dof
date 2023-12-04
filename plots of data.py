@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 # Define the CSV file and field names
 output_dir = 'Gen_Data'
-output_file = f'{output_dir}/saved_data.csv'
+output_file = f'{output_dir}/saved_datacenterfilter2.csv'
 fieldnames = ["num", "x", "y", "targetX", "targetY", "errorX", "errorY", "tot_error", "PID_x", "PID_y"]
 
 # Read data using pandas
@@ -53,7 +53,7 @@ plt.figure(figsize=(8, 6))
 # Plot errorX and errorY separately vs Time
 plt.plot(errorX_values, label='ErrorX', color='green')
 plt.plot(errorY_values, label='ErrorY', color='blue')
-plt.xlabel('Time')
+plt.xlabel('number of updates')
 plt.ylabel('Error')
 plt.legend()
 plt.title('ErrorX and ErrorY vs Time')
@@ -63,10 +63,10 @@ plt.show()
 plt.figure(figsize=(8, 6), dpi=900)
 
 # Plot x vs y
-plt.plot(Pidx_values, label='Pådrag PID x')
-plt.plot(Pidy_values,  label='Pådrag PID Y')
-plt.xlabel('time')
-plt.ylabel('gain')
+plt.plot(Pidx_values, label='PID X')
+plt.plot(Pidy_values,  label='PID Y')
+plt.xlabel('number of updates')
+plt.ylabel('effect')
 plt.legend()
 plt.title('Effect of PID regulator ')
 
