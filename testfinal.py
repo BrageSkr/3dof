@@ -26,10 +26,10 @@ vmax_v = 255
 # vmax_v = 255
 counter = 0
 filter_on = True
-center = False
-circle = True
+center = True
+circle = False
 eight = False
-plot = False
+plot = True
 camera_port = 0
 cap = cv2.VideoCapture(camera_port)
 cap.set(3, 960)
@@ -39,7 +39,7 @@ h, w, _ = img.shape
 # Initialization of the CSV file:
 fieldnames = ["num", "x", "y", "targetX", "targetY", "errorX", "errorY", "tot_error", "PID_x", "PID_y"]
 output_dir = 'CSV_sourcecode/Gen_Data'
-output_file = f'{output_dir}/saved_data.csv'
+output_file = f'{output_dir}/saved_datafullfilter.csv'
 
 # Check if directory exists, create if not
 if not os.path.exists(output_dir):
@@ -76,13 +76,13 @@ def save_data(xpos, ypos, targetx, targety, errorx, errory, PID_x, PID_y, plot):
 
 
 def ball_track(key1, queue, reff_queue):
-
     class button:
         def __init__(self, sizeX, sizeY, cordX, cordY):
             self.size = sizeX, sizeY
             self.cord = cordX, cordY
-            self.BtmRight = cordX+sizeX, cordY+sizeY
-            self.TxtPos = cordX+20, int(cordY+sizeY/1.75)
+            self.BtmRight = cordX + sizeX, cordY + sizeY
+            self.TxtPos = cordX + 20, int(cordY + sizeY / 1.75)
+
         def getCord(self):
             return self.cord
 
@@ -98,11 +98,12 @@ def ball_track(key1, queue, reff_queue):
         def TextPos(self):
             return self.TxtPos
 
-    CenterButton = button(160,60,30,30)
-    CircleButton = button(160,60,30,120)
+    CenterButton = button(160, 60, 30, 30)
+    CircleButton = button(160, 60, 30, 120)
     EightButton = button(160, 60, 30, 210)
-    PlotButton = button(120,60,30,440)
+    PlotButton = button(120, 60, 30, 440)
     StopPlotButton = button(120, 60, 160, 440)
+
     def mouse_callback(event, x, y, flags, param):
         global center, circle, eight, plot
 
@@ -140,9 +141,9 @@ def ball_track(key1, queue, reff_queue):
     prevY = 0
 
 
+
     if key1:
         print('Ball tracking is initiated')
-
 
     myColorFinder = ColorFinder(
         False)  # if you want to find the color and calibrate the program we use this *(Debugging)
@@ -154,13 +155,13 @@ def ball_track(key1, queue, reff_queue):
     while True:
         get, img = cap.read()
         mask_plat = np.zeros(img.shape[:2], dtype='uint8')
-        cv2.circle(mask_plat, (480, 270), 220, (255, 255, 255), -1)
+        cv2.circle(mask_plat, (480, 270), 210, (255, 255, 255), -1)
 
         # Make circular mask
         masked = cv2.bitwise_and(img, img, mask=mask_plat)
 
         imgColor, mask = myColorFinder.update(masked, hsvVals)
-        imgContour, countours = cvzone.findContours(masked, mask, minArea=2000, maxArea=5500)
+        imgContour, countours = cvzone.findContours(masked, mask, minArea=1500, maxArea=5500)
 
         x = -120
         y = -120
@@ -183,11 +184,11 @@ def ball_track(key1, queue, reff_queue):
 
         imgStack = cvzone.stackImages([imgContour], 1, 1)
 
-        #Ball Track stuff
+        # Ball Track stuff
         cv2.circle(imgStack, (x, y), 5, (20, 20, 255), 2)
         cv2.circle(imgStack, (x, y), 40, (180, 120, 255), 2)
 
-        #Ball velocity vector
+        # Ball velocity vector
         vector = [prevX - x, prevY - y]
         cv2.arrowedLine(imgStack, (x, y), (x - vector[0] * 10, y - vector[1] * 10), (39, 237, 250), 4)
 
@@ -196,13 +197,16 @@ def ball_track(key1, queue, reff_queue):
 
         if circle:
             cv2.circle(imgStack,
-                   (center_point[0] + int(80 * np.cos(time.time())), center_point[1] - int(80 * np.sin(time.time()))),
-                   5, (20, 20, 255), 2)
+                       (center_point[0] + int(80 * np.cos(time.time()*2)),
+                        center_point[1] - int(80 * np.sin(time.time()*2))),
+                       5, (20, 20, 255), 2)
 
         if eight:
+            scale = 2 / (3.5 - np.cos(2 * time.time() * 0.7))
             cv2.circle(imgStack,
-                   (center_point[0] + int(80 * np.sin(time.time())), center_point[1] - int(80 * np.sin(2*time.time()))),
-                   5, (20, 20, 255), 2)
+                       (center_point[0] + int(scale * 150 * np.cos(time.time() * 0.7)),
+                        center_point[1] - int(scale * 150 * np.sin(2 * time.time() * 0.7) / 1.69)),
+                       5, (20, 20, 255), 2)
 
         # Center Button
         cv2.rectangle(imgStack, CenterButton.TopLeft(), CenterButton.BottomRight(), (40, 160, 40), -1)
@@ -235,9 +239,8 @@ def ball_track(key1, queue, reff_queue):
         cv2.setMouseCallback("Image", mouse_callback)
         cv2.waitKey(1)
 
-
 def servo_control(key2, queue, reff_queue):
-    port_id = '/dev/cu.usbmodem1101'
+    port_id = '/dev/cu.usbmodem1401'
     # initialise serial interface
     arduino = serial.Serial(port=port_id, baudrate=250000, timeout=0.1)
 
@@ -261,8 +264,9 @@ def servo_control(key2, queue, reff_queue):
             self.dt = time.time() - self.start_time
             self.error = self.setpoint - systemValue
             self.IntegralError += self.error * self.dt
+            self.IntegralError = np.clip(self.IntegralError, -4.2, 4.2)
             self.DerivativeError = (self.error - self.lastError) / self.dt
-
+            print(self.IntegralError)
             output = (-self.Kp * self.error) + (-self.Ki * self.IntegralError) + (-self.Kd * self.DerivativeError)
 
             self.lastError = self.error
@@ -354,7 +358,7 @@ def servo_control(key2, queue, reff_queue):
 
     def butter_lowpass_filter(data, cutoff, fs,
                               order):  # https://medium.com/analytics-vidhya/how-to-filter-noise-with-a-low-pass-filter-python-885223e5e9b7
-        normal_cutoff = cutoff / (0.5 * fs)
+        normal_cutoff = cutoff / (0.05 * fs)
         # Get the filter coefficients
         b, a = butter(order, normal_cutoff, btype='low', analog=False)
         y = filtfilt(b, a, data)
@@ -387,15 +391,13 @@ def servo_control(key2, queue, reff_queue):
         # print('The angles send to the arduino : ', data)
         arduino.write(bytes(data, 'utf-8'))
 
-    # kp =  0.39 # 20s
-    kp = 0.482  # 9sek
-    # kp = 0.51 #brageverdi
+    kp = 0.48#0.52  # 0.48brageverdi
     # ki =  0.64 # 20s
-    ki = 0.346  # 9sek
-    # ki = 0.31 #brageverdi
+
+    ki = 0.45  # 0.44brageverdi
     # kd =  0.345 # 20s
-    kd = 0.33  # 9sek
-    # kd = 0.25 #brageverdi 9sek
+
+    kd = 0.535#0.62  # 0.535brageverdi 9sek
 
     PID_X = PID(kp, ki, kd, 0)
     PID_Y = PID(kp, ki, kd, 0)
@@ -411,12 +413,13 @@ def servo_control(key2, queue, reff_queue):
             PID_Y.updateSetpoint(0)
 
         if circle:
-            PID_X.updateSetpoint(int(80 * np.cos(time.time()) / 10))
-            PID_Y.updateSetpoint(int(80 * np.sin(time.time()) / 10))
+            PID_X.updateSetpoint((80 * np.cos(time.time()*2) / 10))
+            PID_Y.updateSetpoint((80 * np.sin(time.time()*2) / 10))
 
         if eight:
-            PID_X.updateSetpoint(int(80 * np.sin(time.time())/10))
-            PID_Y.updateSetpoint(int(80 * np.sin(2*time.time())/10))
+            scale = 2 / (3.5 - np.cos(2 * time.time() * 0.7))
+            PID_X.updateSetpoint(scale * 15 * np.cos(time.time() * 0.7))
+            PID_Y.updateSetpoint(scale * 15 * np.sin(2 * time.time() * 0.7) / 1.69)
 
         if cord_info == 'nil':
             PID_X.resetErrors()
@@ -435,31 +438,36 @@ def servo_control(key2, queue, reff_queue):
         output_y = PID_Y.compute(pos_y)
 
         if output_x != 0:
-            cutoff_x = np.abs(3)
-            PID_filter_data_x.append(output_x)
-        else:
-            cutoff_x = 2
+            PID_filter_data_x.append(PID_X.getDerivativeError())
 
         if output_y != 0:
-            cutoff_y = np.abs(3)
-            PID_filter_data_y.append(output_y)
+            PID_filter_data_y.append(PID_Y.getDerivativeError())
+
+        if pos_x != 0:
+            cutoff_x = 0.13
         else:
-            cutoff_y = 2
+            cutoff_x = 0.01
+
+        if pos_x != 0:
+            cutoff_y = 0.13
+        else:
+            cutoff_y = 0.01
 
         if filter_on:
             if ((len(PID_filter_data_x) >= 15) and (len(PID_filter_data_y) >= 15)):
-                print("cutoff_x: ", cutoff_x)
-                print("cutoff_y: ", cutoff_y)
-                filtered_error_data_x = butter_lowpass_filter(data=PID_filter_data_x, cutoff=cutoff_x, fs=100, order=2)
-                filtered_error_data_y = butter_lowpass_filter(data=PID_filter_data_y, cutoff=cutoff_y, fs=100, order=2)
+                filtered_error_data_x = butter_lowpass_filter(data=PID_filter_data_x, cutoff=cutoff_x, fs=100, order=1)
+                filtered_error_data_y = butter_lowpass_filter(data=PID_filter_data_y, cutoff=cutoff_y, fs=100, order=1)
                 filter_deriv_error_x = filtered_error_data_x[len(filtered_error_data_x) - 1]
                 filter_deriv_error_y = filtered_error_data_y[len(filtered_error_data_y) - 1]
-                output_x = filter_deriv_error_x
-                output_y = filter_deriv_error_y
+                PID_x_filter = PID_X.compute_filtered(pos_x, PID_X.getError(), PID_X.getIntegralError(), filter_deriv_error_x)
+                PID_y_filter = PID_Y.compute_filtered(pos_y, PID_Y.getError(), PID_Y.getIntegralError(), filter_deriv_error_y)
+                output_x = PID_x_filter
+                output_y = PID_y_filter
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         write_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
-        save_data(pos_x, pos_y, PID_X.getSetpoint(), PID_Y.getSetpoint(), PID_X.getError(), PID_Y.getError(), output_x, output_y, plot)
+        save_data(pos_x, pos_y, PID_X.getSetpoint(), PID_Y.getSetpoint(), PID_X.getError(), PID_Y.getError(), output_x,
+                  output_y, plot)
     root.mainloop()  # running loop
 
 

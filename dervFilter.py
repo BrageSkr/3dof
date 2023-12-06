@@ -33,7 +33,7 @@ h, w, _ = img.shape
 fieldnames = ["num", "x", "y", "targetX", "targetY", "errorX", "errorY", "tot_error", "PID_x", "PID_y"]
 
 output_dir = 'Gen_Data'
-output_file = f'{output_dir}/saved_datadervfilter175_2.csv'
+output_file = f'{output_dir}/saved_data81.csv'
 
 # Check if directory exists, create if not
 if not os.path.exists(output_dir):
@@ -118,8 +118,11 @@ def ball_track(key1, queue):
         vector = [prevX - x, prevY - y]
         cv2.arrowedLine(imgStack, (x, y), (x - vector[0] * 10, y - vector[1] * 10), (39, 237, 250), 4)
 
+        scale = 2 / (3 - np.cos(2 * time.time() * 0.7))
+
         cv2.circle(imgStack,
-                   (center_point[0] + int(80 * np.cos(time.time())), center_point[1] - int(80 * np.sin(time.time()))),
+                   (center_point[0] + int( scale * 150 * np.cos(time.time() * 0.7)),
+                    center_point[1] - int(scale * 150 * np.sin(2 * time.time() * 0.7) / 1.69)),
                    5, (20, 20, 255), 2)
 
         prevX = x
@@ -131,7 +134,7 @@ def ball_track(key1, queue):
 
 
 def servo_control(key2, queue):
-    port_id = '/dev/cu.usbmodem1101'
+    port_id = '/dev/cu.usbmodem1401'
     # initialise serial interface
     arduino = serial.Serial(port=port_id, baudrate=250000, timeout=0.1)
 
@@ -155,8 +158,9 @@ def servo_control(key2, queue):
             self.dt = time.time() - self.start_time
             self.error = self.setpoint - systemValue
             self.IntegralError += self.error * self.dt
+            self.IntegralError= np.clip(self.IntegralError,-3.2,3.2)
             self.DerivativeError = (self.error - self.lastError) / self.dt
-
+            print(self.IntegralError)
 
             output = (-self.Kp * self.error) + (-self.Ki * self.IntegralError) + (-self.Kd * self.DerivativeError)
 
@@ -279,13 +283,20 @@ def servo_control(key2, queue):
         # print('The angles send to the arduino : ', data)
         arduino.write(bytes(data, 'utf-8'))
 
-    kp = 0.51  # brageverdi
+    kp = 0.46  # brageverdi
     # ki =  0.64 # 20s
 
-    ki = 0.33  # brageverdi
+    ki = 0.31  # brageverdi
     # kd =  0.345 # 20s
 
     kd = 0.338  # brageverdi 9sek
+    kp = 0.48  # 0.52  # 0.48brageverdi
+    # ki =  0.64 # 20s
+
+    ki = 0.45  # 0.44brageverdi
+    # kd =  0.345 # 20s
+
+    kd = 0.535  # 0.62  # 0.535brageverdi 9sek
 
     PID_X = PID(kp, ki, kd, 0)
     PID_Y = PID(kp, ki, kd, 0)
@@ -299,9 +310,11 @@ def servo_control(key2, queue):
         cord_info = get_ball_pos()  # Ballpos
         deriv_error_x = PID_X.getDerivativeError()
         deriv_error_y = PID_Y.getDerivativeError()
-        print("deriv", deriv_error_x, " , ", deriv_error_y)
-        reff_val_x = (80*np.cos(time.time()))/10
-        reff_val_y = (80*np.sin(time.time()))/10
+        scale = 2 / (3 - np.cos(2 * time.time()*0.7))
+        reff_val_x = scale * 15*np.cos(time.time()*0.7)
+        reff_val_y = scale * 15*np.sin(2 * time.time()*0.7) / 1.69
+       # reff_val_x = (100 * np.sin(time.time() *0.5) / 10)#(80*np.cos(time.time()))/10
+       # reff_val_y = (100 * np.sin(2 * time.time()*0.5 ) / 10)#(80*np.sin(time.time()))/10
         PID_Y.updateSetpoint(reff_val_y)
         PID_X.updateSetpoint(reff_val_x)
 
@@ -331,21 +344,20 @@ def servo_control(key2, queue):
             PID_filter_data_y.append(PID_Y.getDerivativeError())
 
         if pos_x != 0:
-            cutoff_x = 0.175
+            cutoff_x = 0.13
         else:
             cutoff_x = 0.01
 
         if pos_x != 0:
-            cutoff_y = 0.175
+            cutoff_y = 0.13
         else:
             cutoff_y = 0.01
 
         if filter_on:
             if ((len(PID_filter_data_x) >= 15) and (len(PID_filter_data_y) >= 15)):
-                filtered_error_data_x = butter_lowpass_filter(data=PID_filter_data_x, cutoff=cutoff_x, fs=100, order=2)
-                filtered_error_data_y = butter_lowpass_filter(data=PID_filter_data_y, cutoff=cutoff_y, fs=100, order=2)
-                print("Filter_data x-----------", filtered_error_data_x[len(filtered_error_data_x) - 1])
-                print("Filter_data y-----------", filtered_error_data_y[len(filtered_error_data_y) - 1])
+                filtered_error_data_x = butter_lowpass_filter(data=PID_filter_data_x, cutoff=cutoff_x, fs=100, order=1)
+                filtered_error_data_y = butter_lowpass_filter(data=PID_filter_data_y, cutoff=cutoff_y, fs=100, order=1)
+
                 filter_deriv_error_x = filtered_error_data_x[len(filtered_error_data_x) - 1]
                 filter_deriv_error_y = filtered_error_data_y[len(filtered_error_data_y) - 1]
                 PID_x_filter = PID_X.compute_filtered(pos_x, PID_X.getError(), PID_X.getIntegralError(), filter_deriv_error_x)
@@ -355,7 +367,7 @@ def servo_control(key2, queue):
 
 
 
-        print(output_x, "   ", output_y)
+
 
         servo_ang1, servo_ang2, servo_ang3 = ballpos_to_servo_angle(output_x, output_y)  # Ballpos to servo angle
         write_servo(servo_ang1, servo_ang2, servo_ang3)  # Servo angle to arduino
